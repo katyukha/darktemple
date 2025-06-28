@@ -82,7 +82,6 @@ pure struct Parser {
     /** Consume single fragment (block) of text being parsed
       **/
     void consumeBlock() pure {
-        import std.ascii: newline;
         // in case of non-text blocks, we have to skip block start token and strip spaces
         final switch(_block_info.type) {
             case FragmentType.Text:
@@ -111,8 +110,15 @@ pure struct Parser {
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite)
                             _block_end--;
 
-                        if ((_block_info.type == FragmentType.Statement || _block_info.type == FragmentType.Comment) && _data.length - _cursor >= newline.length && _data[_cursor .. _cursor + newline.length] == newline)
-                            _cursor += newline.length;
+                        /* Handle newlines on end of statement on comment.
+                         * newline could be '\n' or '\r\n', if it is present, then we have to skip it
+                         */
+                        if (_block_info.type == FragmentType.Statement || _block_info.type == FragmentType.Comment) {
+                            if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor + 2] == "\r\n")
+                                _cursor += 2;
+                            else if (_data.length - _cursor >= 1 && _data[_cursor .. _cursor + 1] == "\n")
+                                _cursor += 1;
+                        }
 
                         return;
                     }
