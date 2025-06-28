@@ -3,18 +3,7 @@ module darktemple.parser;
 private import std.algorithm: canFind;
 private import std.ascii: isWhite;
 
-// TODO: Create ParserConfig struct instead and use it as template parametr for parser
-enum Block : string {
-    PlaceholderStart="{{",
-    PlaceholderEnd="}}",
-    StatementStart="{%",
-    StatementEnd="%}",
-    CommentStart="{#",
-    CommentEnd="#}",
-}
-
-enum string[] blockStartTokens = [Block.PlaceholderStart, Block.StatementStart, Block.CommentStart];
-
+// Type of fragment.
 enum FragmentType {
     Text,
     Placeholder,
@@ -22,6 +11,28 @@ enum FragmentType {
     Comment,
 }
 
+// Information about fragment that includes type, startToken, endToken
+struct FragmentInfo {
+    FragmentType type;
+    string startToken;
+    string endToken;
+}
+
+enum FragmentInfoText = FragmentInfo(type: FragmentType.Text, startToken: null, endToken: null);
+enum FragmentInfoPlaceholder = FragmentInfo(type: FragmentType.Placeholder, startToken: "{{", endToken: "}}");
+enum FragmentInfoStatement = FragmentInfo(type: FragmentType.Statement, startToken: "{%", endToken: "%}");
+enum FragmentInfoComment = FragmentInfo(type: FragmentType.Comment, startToken: "{#", endToken: "#}");
+
+// Start tokens for statements. Used to search the end of text block.
+enum string[] blockStartTokens = [
+    FragmentInfoPlaceholder.startToken,
+    FragmentInfoStatement.startToken,
+    FragmentInfoComment.startToken,
+];
+
+/** This struct represents single fragment of parsed content and
+  * includes info about fragment type, line number and data part of fragment
+  **/
 pure struct Fragment {
     FragmentType type;
     string data;
@@ -37,7 +48,7 @@ pure struct Parser {
     private ulong _block_start = 0;
     private ulong _block_start_ln = 0;
     private ulong _block_end = 0;
-    private FragmentType _block_type;
+    private FragmentInfo _block_info;
 
     this(immutable string data) pure {
         _data = data;
@@ -49,7 +60,7 @@ pure struct Parser {
 
         if (_block_end > _block_start)
             return Fragment(
-                type: _block_type,
+                type: _block_info.type,
                 data: _data[_block_start .. _block_end],
                 line: _block_start_ln,
             );
@@ -63,7 +74,7 @@ pure struct Parser {
 
     void consumeBlock() pure {
         // in case of non-text blocks, we have to skip block start token and strip spaces
-        final switch(_block_type) {
+        final switch(_block_info.type) {
             case FragmentType.Text:
                 // Do nothing here. It is just text
                 break;
@@ -76,7 +87,7 @@ pure struct Parser {
         while (_cursor < _data.length) {
             if (_data[_cursor] == '\n') _cursor_ln++;
 
-            final switch(_block_type) {
+            final switch(_block_info.type) {
                 case FragmentType.Text:
                     if (_data.length - _cursor >= 2 && blockStartTokens.canFind(_data[_cursor .. _cursor+2])) {
                         _block_end = _cursor;
@@ -84,7 +95,7 @@ pure struct Parser {
                     }
                     break;
                 case FragmentType.Placeholder:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.PlaceholderEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
@@ -92,7 +103,7 @@ pure struct Parser {
                     }
                     break;
                 case FragmentType.Statement:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.StatementEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
@@ -100,7 +111,7 @@ pure struct Parser {
                     }
                     break;
                 case FragmentType.Comment:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == Block.CommentEnd) {
+                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
                         _block_end = _cursor;
                         _cursor += 2;
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
@@ -117,26 +128,26 @@ pure struct Parser {
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
             // There are less then 3 digits, left, thus it could be just text block.
-            _block_type = FragmentType.Text;
+            _block_info = FragmentInfoText;
             consumeBlock;
             return;
         }
         import std.stdio;
         switch (_data[_cursor .. _cursor + 2]) {
-            case Block.PlaceholderStart:
-                _block_type = FragmentType.Placeholder;
+            case FragmentInfoPlaceholder.startToken:
+                _block_info = FragmentInfoPlaceholder;
                 consumeBlock;
                 return;
-            case Block.StatementStart:
-                _block_type = FragmentType.Statement;
+            case FragmentInfoStatement.startToken:
+                _block_info = FragmentInfoStatement;
                 consumeBlock;
                 return;
-            case Block.CommentStart:
-                _block_type = FragmentType.Comment;
+            case FragmentInfoComment.startToken:
+                _block_info = FragmentInfoComment;
                 consumeBlock;
                 return;
             default:
-                _block_type = FragmentType.Text;
+                _block_info = FragmentInfoText;
                 consumeBlock;
                 return;
         }
