@@ -46,6 +46,22 @@ pure class TemplateDataBlock : ITemplateStatement {
     }
 }
 
+pure class TemplateImportBlock : ITemplateStatement {
+    private const string _expression;
+
+    this(in string expression) pure {
+        _expression = expression;
+    }
+
+    override string generateCode() const pure {
+        return "    import " ~ _expression ~ ";\n";
+    }
+
+    override string toString() const pure {
+        return "TemplateImportBlock: [" ~ _expression ~ "]";
+    }
+}
+
 pure class TemplatePlaceholder : ITemplateStatement {
     private const string _expression;
 
@@ -225,6 +241,9 @@ pure class Template : TemplateMultiST {
                         } else {
                             throw new Exception("Found 'endfor', but no opened FOR statemenet at this place.");
                         }
+                    } else if (fragment.data.startsWith("import ")) {
+                        auto stImport = new TemplateImportBlock(fragment.data[7 .. $]);
+                        _stack.back.addStatement(stImport);
                     } else
                         assert(0, "Unknown instruction '%s'".format(fragment.data));
                     break;

@@ -111,3 +111,22 @@ Content:
 - pineapple
 "));
 }
+
+// Render file 3
+unittest {
+    auto val1 = 42;
+    auto val2 = 78;
+    assert(
+        renderFile!("test-templates/template.3.tmpl", val1, val2) == (
+"Value 1: 42
+Value 2: 78
+"));
+}
+
+// Render file 4
+unittest {
+    assert(
+        renderFile!("test-templates/template.4.tmpl") == (
+"Value: my-int=42
+"));
+}
