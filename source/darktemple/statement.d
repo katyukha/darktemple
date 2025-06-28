@@ -10,6 +10,7 @@ private import std.format: format;
 
 private import darktemple.parser: Parser, FragmentType, Fragment;
 private import darktemple.exception: DarkTempleException;
+private import darktemple.utils: doEscapeString;
 
 
 interface ITemplateStatement {
@@ -28,17 +29,21 @@ pure class TemplateDataBlock : ITemplateStatement {
     private const string _data;
 
     this(in string data) pure {
-        _data = data;
+        _data = data.doEscapeString;
     }
 
     override string generateCode() const pure {
-        return "    output.put(\"" ~ _data.replace("\"", "\\\"") ~ "\");\n";
+        return "    output.put(\"" ~ _data ~ "\");\n";
     }
 
     override string toString() const pure {
         return "TemplateDataBlock: [" ~ _data ~ "]";
     }
 
+    unittest {
+        enum x = new TemplateDataBlock("somevar\nbackslash: \\,\nquote: \",\n").generateCode;
+        assert(x == "    output.put(\"somevar\nbackslash: \\\\,\nquote: \\\",\n\");\n");
+    }
 }
 
 pure class TemplatePlaceholder : ITemplateStatement {
