@@ -47,8 +47,41 @@ And result will be:
 Test template.
 
 User: John
-
 User is active!
+```
+
+### Example with file that contains for statement
+
+Content of template:
+
+```
+Test for statement
+
+Data: {{ data }}
+Content:
+{% for el; data %}
+- {{ el }}
+{% endfor %}
+```
+
+Code:
+
+```d
+    string[] data = ["apple", "orange", "pineapple"];
+    renderFile!("test-templates/template.2.tmpl", data);
+
+```
+
+Result:
+
+```
+Test for statement
+
+Data: [\"apple\", \"orange\", \"pineapple\"]
+Content:
+- apple
+- orange
+- pineapple
 ```
 
 ## License

@@ -49,6 +49,8 @@ unittest {
     assert(render!(`Hello {% if status == "1" %}dear{% elif status == "2" %}lucky{% else %}some{% endif %} user!`, status) == `Hello some user!`);
 
     assert(render!(`Numbers: {% for num; 1 .. 5 %}{{num}}, {% endfor %}`) == `Numbers: 1, 2, 3, 4, `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %}{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %}\n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
 }
 
 // Render file
@@ -65,7 +67,6 @@ unittest {
 "Test template.
 
 User: John
-
 User is active!
 "));
 }
@@ -78,7 +79,7 @@ string renderFile(string path, ALIASES...)() {
 }
 
 
-// Render file
+// Render file 1
 unittest {
 
     struct User {
@@ -92,7 +93,21 @@ unittest {
 "Test template.
 
 User: John
-
 User is active!
+"));
+}
+
+// Render file 2
+unittest {
+    string[] data = ["apple", "orange", "pineapple"];
+    assert(
+        renderFile!("test-templates/template.2.tmpl", data) == (
+"Test for statement
+
+Data: [\"apple\", \"orange\", \"pineapple\"]
+Content:
+- apple
+- orange
+- pineapple
 "));
 }
