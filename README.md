@@ -9,7 +9,10 @@ Currently, this is **dev** version of library.
 **Everything will be changed**.
 
 
-## Usage
+## Usage examples
+
+Take a look at [test templates](https://github.com/katyukha/darktemple/tree/main/test-data/test-templates) for actual examples of usage,
+that are used for automated tests.
 
 ### Simple example
 
