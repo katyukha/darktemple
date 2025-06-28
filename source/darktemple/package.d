@@ -1,3 +1,3 @@
 module darktemple;
 
-public import darktemple.render: render;
+public import darktemple.render: render, renderFile;
