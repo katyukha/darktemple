@@ -1,6 +1,6 @@
 # DarkTemple
 
-Born in the darkest place universe full of darkest magic....
+Born in the darkest place of the universe, full of darkest magic...
 
 It is jinja-like compile-time template engine for D programming language.
 The key goal for this implementation is to make it reliable, simple and convenient;

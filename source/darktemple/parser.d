@@ -18,6 +18,7 @@ struct FragmentInfo {
     string endToken;
 }
 
+// Define info about fragments
 enum FragmentInfoText = FragmentInfo(type: FragmentType.Text, startToken: null, endToken: null);
 enum FragmentInfoPlaceholder = FragmentInfo(type: FragmentType.Placeholder, startToken: "{{", endToken: "}}");
 enum FragmentInfoStatement = FragmentInfo(type: FragmentType.Statement, startToken: "{%", endToken: "%}");
@@ -39,8 +40,12 @@ pure struct Fragment {
     ulong line;
 }
 
-// TODO: Throw error, when  cannot find block end ('}}', '%}', '#}')
+/** Template parser. Implements range API.
+  * Parse provided template in one iteration.
+  * Parsed fragments (blocks) are: text, placeholder, statement and comment
+  **/
 pure struct Parser {
+// TODO: Throw error, when  cannot find block end ('}}', '%}', '#}')
     private immutable string _data;
 
     private ulong _cursor = 0;
@@ -68,10 +73,14 @@ pure struct Parser {
         assert(0, "Parser result already consumed!");
     }
 
+    /** Returns true there is nothing left to parse (range fully consumed)
+      **/
     bool empty() const pure {
         return _block_start >= _data.length;
     }
 
+    /** Consume single fragment (block) of text being parsed
+      **/
     void consumeBlock() pure {
         // in case of non-text blocks, we have to skip block start token and strip spaces
         final switch(_block_info.type) {
@@ -94,23 +103,7 @@ pure struct Parser {
                         return;
                     }
                     break;
-                case FragmentType.Placeholder:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
-                        _block_end = _cursor;
-                        _cursor += 2;
-                        while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
-                        return;
-                    }
-                    break;
-                case FragmentType.Statement:
-                    if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
-                        _block_end = _cursor;
-                        _cursor += 2;
-                        while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite) _block_end--;
-                        return;
-                    }
-                    break;
-                case FragmentType.Comment:
+                case FragmentType.Placeholder, FragmentType.Statement, FragmentType.Comment:
                     if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor+2] == _block_info.endToken) {
                         _block_end = _cursor;
                         _cursor += 2;
@@ -125,34 +118,32 @@ pure struct Parser {
         _block_end = _data.length;
     }
 
+    /** Find next fragment (block) in the text being parsed and consume it
+      **/
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
             // There are less then 3 digits, left, thus it could be just text block.
             _block_info = FragmentInfoText;
-            consumeBlock;
-            return;
-        }
-        import std.stdio;
-        switch (_data[_cursor .. _cursor + 2]) {
+        } else switch (_data[_cursor .. _cursor + 2]) {
             case FragmentInfoPlaceholder.startToken:
                 _block_info = FragmentInfoPlaceholder;
-                consumeBlock;
-                return;
+                break;
             case FragmentInfoStatement.startToken:
                 _block_info = FragmentInfoStatement;
-                consumeBlock;
-                return;
+                break;
             case FragmentInfoComment.startToken:
                 _block_info = FragmentInfoComment;
-                consumeBlock;
-                return;
+                break;
             default:
                 _block_info = FragmentInfoText;
-                consumeBlock;
-                return;
+                break;
         }
+        consumeBlock;
     }
 
+    /** Move cursor to the end of last parsed block, thus
+      * next call to front will parse next block.
+      **/
     void popFront() pure
     in (!empty, "Attempt to popFront already consumed parser") {
         _block_start = _cursor;
