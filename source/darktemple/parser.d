@@ -3,6 +3,9 @@ module darktemple.parser;
 private import std.algorithm: canFind;
 private import std.ascii: isWhite;
 
+// Used to detect trailing whitespaces
+immutable (char[]) TRAILING_WHITE = [' ', '\t'];
+
 // Type of fragment.
 enum FragmentType {
     Text,
@@ -93,6 +96,7 @@ pure struct Parser {
                 _block_start = _cursor;
                 break;
         }
+
         while (_cursor < _data.length) {
             if (_data[_cursor] == '\n') _cursor_ln++;
 
@@ -110,13 +114,35 @@ pure struct Parser {
                         while(_block_end - 1 > _block_start && _data[_block_end - 1].isWhite)
                             _block_end--;
 
-                        /* Handle newlines on end of statement on comment.
+                        /* Handle newlines on end of statement and comment.
                          * newline could be '\n' or '\r\n', if it is present, then we have to skip it
                          */
                         if (_block_info.type == FragmentType.Statement || _block_info.type == FragmentType.Comment) {
+                            if (_data.length - _cursor >= 1 && TRAILING_WHITE.canFind(_data[_cursor])) {
+                                // Look ahead to detect trailing whitespaces, and strip them
+                                for(ulong t_cursor=_cursor; t_cursor < _data.length-1; t_cursor++) {
+                                    if (_data[t_cursor] == '\n' || _data[t_cursor] == '\r') {
+                                        /* If we reached end of line, and did not find any characters except whitespaces,
+                                         * Then we can move cursor to reached location safely.
+                                         * This way we can skip trailing whitespaces
+                                         */
+                                        _cursor = t_cursor;
+                                        break;
+                                    }
+                                    else if (!TRAILING_WHITE.canFind(_data[t_cursor]))
+                                        /* If we have found something that is not whitespace before we reached end of line,
+                                         * than we it is not trailing whitespace, and we have to stop the detection of trailing whitespaces.
+                                         */
+                                        break;
+                                }
+                            }
+
+                            // Skip trailing new lines
                             if (_data.length - _cursor >= 2 && _data[_cursor .. _cursor + 2] == "\r\n")
                                 _cursor += 2;
                             else if (_data.length - _cursor >= 1 && _data[_cursor .. _cursor + 1] == "\n")
+                                _cursor += 1;
+                            else if (_data.length - _cursor >= 1 && _data[_cursor .. _cursor + 1] == "\r")
                                 _cursor += 1;
                         }
 
@@ -134,7 +160,7 @@ pure struct Parser {
       **/
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
-            // There are less then 3 digits, left, thus it could be just text block.
+            // There are less then 3 digits left, thus it could be just text block.
             _block_info = FragmentInfoText;
         } else switch (_data[_cursor .. _cursor + 2]) {
             case FragmentInfoPlaceholder.startToken:
@@ -147,6 +173,9 @@ pure struct Parser {
                 _block_info = FragmentInfoComment;
                 break;
             default:
+                /* If previous block was not text block, and current start symbold is space,
+                   then we have to enable trailing white space detection to remove trailing spaces
+                */
                 _block_info = FragmentInfoText;
                 break;
         }

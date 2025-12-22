@@ -51,6 +51,11 @@ unittest {
     assert(render!(`Numbers: {% for num; 1 .. 5 %}{{num}}, {% endfor %}`) == `Numbers: 1, 2, 3, 4, `);
     assert(render!("Numbers: {% for num; 1 .. 5 %}{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
     assert(render!("Numbers: {% for num; 1 .. 5 %}\n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %}\r{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %}\r\n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %} \n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %} \r{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
+    assert(render!("Numbers: {% for num; 1 .. 5 %} \r\n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
 }
 
 // Render file
@@ -128,5 +133,20 @@ unittest {
     assert(
         renderFile!("test-templates/template.4.tmpl") == (
 "Value: my-int=42
+"));
+}
+
+// Render file 5
+unittest {
+    string[] data = ["apple", "orange", "pineapple"];
+    assert(
+        renderFile!("test-templates/template.5.tmpl", data) == (
+"Whitespace after for block
+
+Data: [\"apple\", \"orange\", \"pineapple\"]
+Content:
+- apple
+- orange
+- pineapple
 "));
 }
