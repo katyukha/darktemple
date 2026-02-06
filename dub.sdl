@@ -11,4 +11,5 @@ configuration "library" {
 configuration "unittest" {
     stringImportPaths "test-data/"
     dflags "-checkaction=context" "-allinst"
+    dependency "thepath" version="*"
 }

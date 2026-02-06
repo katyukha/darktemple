@@ -7,15 +7,16 @@ template render(string tmpl, ALIASES...) {
     private static import std.conv;
     private static import darktemple.statement;
 
-    static foreach(i; 0 .. ALIASES.length) { //std.range.iota(ALIASES.length)) {
+    static foreach(i; 0 .. ALIASES.length) {
         mixin("alias ALIASES[" ~ std.conv.to!string(i) ~ "] " ~ __traits(identifier, ALIASES[i]) ~ ";");
     }
 
-    private void render_impl(T)(ref T output) pure {
+    private void render_impl(T)(ref T output) {
         mixin(new darktemple.statement.Template(tmpl).generateCode);
     }
 
-    string render() pure {
+    // TODO: Do we need to have it pure?
+    string render() {
         import darktemple.output: DarkTempleOutput;
         DarkTempleOutput o;
         render_impl(o);
@@ -136,6 +137,16 @@ unittest {
 "));
 }
 
+// Render file 4.1
+// Test that simple templates could be wrapped in pure functions
+unittest {
+    auto f() pure {
+        return renderFile!("test-templates/template.4.tmpl");
+    }
+    assert(f == "Value: my-int=42\n");
+}
+
+
 // Render file 5
 unittest {
     string[] data = ["apple", "orange", "pineapple"];
@@ -150,3 +161,23 @@ Content:
 - pineapple
 "));
 }
+
+// Test if template can show files in directory.
+// These templates are compiletime,
+// thus template itself comes from trusted source (developer),
+// thus we can allow it to side-effects
+unittest {
+    import thepath;
+    import thepath.utils: createTempPath;
+    auto root = createTempPath;
+    scope(exit) root.remove();
+
+    root.join("f1.txt").writeFile("Test 1");
+    root.join("f2.txt").writeFile("Test 2");
+
+
+    assert(
+        renderFile!("test-templates/template.6.tmpl", root) == "f1.txt,\nf2.txt,\n");
+}
+
+

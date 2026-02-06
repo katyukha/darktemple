@@ -87,6 +87,27 @@ Content:
 - pineapple
 ```
 
+### Example of template with import directive
+
+Here we can see example, that iterates over files in specified directory `root`.
+Assume that `root` is instance of [`thepath.Path`](https://code.dlang.org/packages/thepath)
+
+Content of template:
+```
+{% import std.algorithm %}
+{% import std.array %}
+{% for f; root.walk.array.sort!((a, b) => a.baseName < b.baseName) %}
+{{ f.baseName }},
+{% endfor %}
+```
+
+Sample output:
+
+```
+f1.txt,
+f2.txt,
+```
+
 ## License
 
 DarkTemple is distributed under MPL-2.0 license.
