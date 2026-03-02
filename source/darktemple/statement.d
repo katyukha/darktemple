@@ -142,13 +142,13 @@ pure class TemplateIf: ITemplateMultiStatement {
             _branches.back.addStatement(st);
     }
 
-    void addElse() pure
-    in (!_else, "Attempt to add second else branch") {
+    void addElse(ulong line) pure {
+        enforce!DarkTempleException(!_else, "Duplicate 'else' at line %d".format(line));
         _else = new TemplateMultiST();
     }
 
-    void addElif(in string condition) pure
-    in (!_else, "Attempt to add elif after else branch") {
+    void addElif(in string condition, ulong line) pure {
+        enforce!DarkTempleException(!_else, "Unexpected 'elif' after 'else' at line %d".format(line));
         _branches ~= new TemplateIfBranch(condition);
     }
 
@@ -218,7 +218,7 @@ pure class Template : TemplateMultiST {
                         _stack ~= stIf;
                     } else if (fragment.data == "else") {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
-                            stIf.addElse;
+                            stIf.addElse(fragment.line);
                         } else {
                             throw new DarkTempleException(
                                 "Unexpected 'else' at line %d: no open 'if' block"
@@ -226,7 +226,7 @@ pure class Template : TemplateMultiST {
                         }
                     } else if (fragment.data.startsWith("elif ")) {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
-                            stIf.addElif(fragment.data[5 .. $]);
+                            stIf.addElif(fragment.data[5 .. $], fragment.line);
                         } else {
                             throw new DarkTempleException(
                                 "Unexpected 'elif' at line %d: no open 'if' block"
@@ -275,6 +275,40 @@ pure class Template : TemplateMultiST {
         tmpl ~= super.generateCode();
         return tmpl;
     }
+}
+
+// Unclosed if/for blocks must throw DarkTempleException (#1)
+unittest {
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(new Template("{% if true %}"));
+    assertThrown!DarkTempleException(new Template("{% for x; xs %}"));
+    // Both unclosed simultaneously — error reports the innermost one
+    assertThrown!DarkTempleException(new Template("{% if true %}{% for x; xs %}"));
+}
+
+// Mismatched nesting: endfor inside if, endif inside for (#2)
+unittest {
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(
+        new Template("{% if true %}{% endfor %}{% endif %}"));
+    assertThrown!DarkTempleException(
+        new Template("{% for x; xs %}{% endif %}{% endfor %}"));
+}
+
+// Double else and elif-after-else trigger D in-contracts, which currently
+// throw AssertError instead of DarkTempleException (#3 — unfixed bug).
+unittest {
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(
+        new Template("{% if true %}{% else %}x{% else %}y{% endif %}"));
+    assertThrown!DarkTempleException(
+        new Template("{% if true %}{% else %}x{% elif z %}y{% endif %}"));
 }
 
 // Tests for issues #3, #4, #5

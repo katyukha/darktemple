@@ -59,6 +59,26 @@ unittest {
     assert(render!("Numbers: {% for num; 1 .. 5 %} \r\n{{num}} {% endfor %}") == `Numbers: 1 2 3 4 `);
 }
 
+// Empty template, comments, and escape round-trips
+unittest {
+    // #5: empty template produces empty string
+    assert(render!("") == "");
+
+    // #6: comments produce no output
+    assert(render!("{# just a comment #}") == "");
+    assert(render!("before{# comment #}after") == "beforeafter");
+    // Newline after comment is consumed; surrounding text is unaffected
+    assert(render!("a\n{# comment #}\nb") == "a\nb");
+
+    // #8: backslash in template literal text round-trips correctly
+    assert(render!("a\\b")   == "a\\b");    // template string is a\b,  output is a\b
+    assert(render!("a\\\\b") == "a\\\\b");  // template string is a\\b, output is a\\b
+
+    // #8: NUL byte in template literal text is preserved in output
+    assert(render!("foo\0bar") == "foo\0bar");
+    assert(render!("a\0\0b")   == "a\0\0b");
+}
+
 // Render file
 unittest {
 
