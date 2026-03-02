@@ -217,19 +217,25 @@ pure class Template : TemplateMultiST {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             stIf.addElse;
                         } else {
-                            throw new Exception("Found 'else', but no opened IF statemenet at this place.");
+                            throw new DarkTempleException(
+                                "Unexpected 'else' at line %d: no open 'if' block"
+                                .format(fragment.line));
                         }
                     } else if (fragment.data.startsWith("elif ")) {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             stIf.addElif(fragment.data[5 .. $]);
                         } else {
-                            throw new Exception("Found 'elif', but no opened IF statemenet at this place.");
+                            throw new DarkTempleException(
+                                "Unexpected 'elif' at line %d: no open 'if' block"
+                                .format(fragment.line));
                         }
                     } else if (fragment.data == "endif") {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             _stack.popBack;
                         } else {
-                            throw new Exception("Found 'endif', but no opened IF statemenet at this place.");
+                            throw new DarkTempleException(
+                                "Unexpected 'endif' at line %d: no open 'if' block"
+                                .format(fragment.line));
                         }
                     } else if (fragment.data.startsWith("for ")) {
                         auto stFor = new TemplateFor(fragment.data[4 .. $]);
@@ -239,22 +245,26 @@ pure class Template : TemplateMultiST {
                         if (auto stIf = cast(TemplateFor) _stack.back) {
                             _stack.popBack;
                         } else {
-                            throw new Exception("Found 'endfor', but no opened FOR statemenet at this place.");
+                            throw new DarkTempleException(
+                                "Unexpected 'endfor' at line %d: no open 'for' block"
+                                .format(fragment.line));
                         }
                     } else if (fragment.data.startsWith("import ")) {
                         auto stImport = new TemplateImportBlock(fragment.data[7 .. $]);
                         _stack.back.addStatement(stImport);
                     } else
-                        assert(0, "Unknown instruction '%s'".format(fragment.data));
+                        throw new DarkTempleException(
+                            "Unknown statement '%s' at line %d"
+                            .format(fragment.data, fragment.line));
                     break;
                 case FragmentType.Comment:
                     // Do nothing
                     break;
             }
         }
-        assert(
-            _stack.length == 1 && _stack[0] is this,
-            "There are unclosed statements. Last unclosed statement is: " ~_stack.back.toString);
+        if (_stack.length != 1 || _stack[0] !is this)
+            throw new DarkTempleException(
+                "Unclosed block: " ~ _stack.back.toString);
     }
 
     override string generateCode() const pure {
@@ -264,4 +274,27 @@ pure class Template : TemplateMultiST {
     }
 }
 
+// Tests for issues #3, #4, #5
+unittest {
+    import std.algorithm: canFind;
+    import std.exception: assertThrown, collectExceptionMsg;
+    import darktemple.exception: DarkTempleException;
+
+    // #3: unknown statement must throw DarkTempleException, not AssertError
+    // #5: all control-flow mismatches must throw DarkTempleException, not Exception
+    assertThrown!DarkTempleException(new Template("{% foobar %}"));
+    assertThrown!DarkTempleException(new Template("{% else %}"));
+    assertThrown!DarkTempleException(new Template("{% elif true %}"));
+    assertThrown!DarkTempleException(new Template("{% endif %}"));
+    assertThrown!DarkTempleException(new Template("{% endfor %}"));
+
+    // #4: error messages must include the line number of the offending statement
+    auto msg1 = collectExceptionMsg!DarkTempleException(
+        new Template("first line\n{% foobar %}"));
+    assert(msg1.canFind("line 1"), "expected 'line 1' in: " ~ msg1);
+
+    auto msg2 = collectExceptionMsg!DarkTempleException(
+        new Template("line 0\nline 1\n{% else %}"));
+    assert(msg2.canFind("line 2"), "expected 'line 2' in: " ~ msg2);
+}
 
