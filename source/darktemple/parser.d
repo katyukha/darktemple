@@ -2,6 +2,7 @@ module darktemple.parser;
 
 private import std.algorithm: canFind;
 private import std.ascii: isWhite;
+private import darktemple.exception: DarkTempleSyntaxError;
 
 // Used to detect trailing whitespaces
 immutable (char[]) TRAILING_WHITE = [' ', '\t'];
@@ -92,7 +93,11 @@ pure struct Parser {
                 break;
             case FragmentType.Placeholder, FragmentType.Statement, FragmentType.Comment:
                 _cursor += 2;
-                while (_data[_cursor].isWhite) _cursor++;
+                while (_cursor < _data.length && _data[_cursor].isWhite) _cursor++;
+                if (_cursor >= _data.length)
+                    throw new DarkTempleSyntaxError(
+                        "Unterminated " ~ _block_info.startToken ~ " block",
+                        _cursor_ln);
                 _block_start = _cursor;
                 break;
         }
@@ -154,13 +159,23 @@ pure struct Parser {
             _cursor++;
         }
         _block_end = _data.length;
+        if (_block_info.type != FragmentType.Text)
+            throw new DarkTempleSyntaxError(
+                "Unterminated " ~ _block_info.startToken ~ " block",
+                _block_start_ln);
     }
 
     /** Find next fragment (block) in the text being parsed and consume it
       **/
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
-            // There are less then 3 digits left, thus it could be just text block.
+            // If exactly 2 chars remain and they form a block opener, that is an
+            // unterminated block — the content and closing token are both missing.
+            if (_data.length - _cursor == 2
+                    && blockStartTokens.canFind(_data[_cursor .. _cursor + 2]))
+                throw new DarkTempleSyntaxError(
+                    "Unterminated " ~ _data[_cursor .. _cursor + 2] ~ " block",
+                    _cursor_ln);
             _block_info = FragmentInfoText;
         } else switch (_data[_cursor .. _cursor + 2]) {
             case FragmentInfoPlaceholder.startToken:
@@ -266,6 +281,49 @@ unittest {
     import std.array: array;
     immutable auto p = Parser(`Hello{% if check %} "{{ name }}"{% endif %}!`).array.map!((a) => a.data).array;;
     assert(p == ["Hello", "if check", " \"", "name", "\"", "endif", "!"]);
+}
+
+// Bug #1: block opener immediately followed by whitespace at end of string
+// Previously caused an out-of-bounds array access (RangeError) in the
+// whitespace-skip loop after advancing past the 2-char opening token.
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{ ").array);
+    assertThrown!DarkTempleException(Parser("{%\t").array);
+    assertThrown!DarkTempleException(Parser("{# ").array);
+}
+
+// Bug #2: unterminated blocks silently consumed the rest of the template
+// instead of raising an error.
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{ name").array);
+    assertThrown!DarkTempleException(Parser("Hello {{ name").array);
+    assertThrown!DarkTempleException(Parser("{% if x").array);
+    assertThrown!DarkTempleException(Parser("{# not closed").array);
+}
+
+// Bug #6: bare block opener (exactly 2 chars) at end of string silently fell
+// through to text mode, then crashed with assert(0) in front().
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{").array);
+    assertThrown!DarkTempleException(Parser("{%").array);
+    assertThrown!DarkTempleException(Parser("{#").array);
+    assertThrown!DarkTempleException(Parser("Hello {{").array);
+    assertThrown!DarkTempleException(Parser("{{ ").array);
+    assertThrown!DarkTempleException(Parser("{% ").array);
+    assertThrown!DarkTempleException(Parser("{# ").array);
+    assertThrown!DarkTempleException(Parser("Hello {{ ").array);
 }
 
 // Test parsing imported file
