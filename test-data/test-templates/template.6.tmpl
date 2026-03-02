@@ -1,0 +1,5 @@
+{% import std.algorithm %}
+{% import std.array %}
+{% for f; root.walk.array.sort!((a, b) => a.baseName < b.baseName) %}
+{{ f.baseName }},
+{% endfor %}
