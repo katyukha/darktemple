@@ -2,6 +2,8 @@ module darktemple.parser;
 
 private import std.algorithm: canFind;
 private import std.ascii: isWhite;
+private import std.conv: to;
+private import darktemple.exception: DarkTempleException;
 
 // Used to detect trailing whitespaces
 immutable (char[]) TRAILING_WHITE = [' ', '\t'];
@@ -92,7 +94,11 @@ pure struct Parser {
                 break;
             case FragmentType.Placeholder, FragmentType.Statement, FragmentType.Comment:
                 _cursor += 2;
-                while (_data[_cursor].isWhite) _cursor++;
+                while (_cursor < _data.length && _data[_cursor].isWhite) _cursor++;
+                if (_cursor >= _data.length)
+                    throw new DarkTempleException(
+                        "Unterminated " ~ _block_info.startToken ~
+                        " block at line " ~ _cursor_ln.to!string);
                 _block_start = _cursor;
                 break;
         }
@@ -154,6 +160,10 @@ pure struct Parser {
             _cursor++;
         }
         _block_end = _data.length;
+        if (_block_info.type != FragmentType.Text)
+            throw new DarkTempleException(
+                "Unterminated " ~ _block_info.startToken ~
+                " block at line " ~ _block_start_ln.to!string);
     }
 
     /** Find next fragment (block) in the text being parsed and consume it
@@ -266,6 +276,32 @@ unittest {
     import std.array: array;
     immutable auto p = Parser(`Hello{% if check %} "{{ name }}"{% endif %}!`).array.map!((a) => a.data).array;;
     assert(p == ["Hello", "if check", " \"", "name", "\"", "endif", "!"]);
+}
+
+// Bug #1: block opener immediately followed by whitespace at end of string
+// Previously caused an out-of-bounds array access (RangeError) in the
+// whitespace-skip loop after advancing past the 2-char opening token.
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{ ").array);
+    assertThrown!DarkTempleException(Parser("{%\t").array);
+    assertThrown!DarkTempleException(Parser("{# ").array);
+}
+
+// Bug #2: unterminated blocks silently consumed the rest of the template
+// instead of raising an error.
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{ name").array);
+    assertThrown!DarkTempleException(Parser("Hello {{ name").array);
+    assertThrown!DarkTempleException(Parser("{% if x").array);
+    assertThrown!DarkTempleException(Parser("{# not closed").array);
 }
 
 // Test parsing imported file
