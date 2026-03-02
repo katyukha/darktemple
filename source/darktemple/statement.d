@@ -3,13 +3,12 @@ module darktemple.statement;
 
 private import std.regex;
 private import std.range;
-private import std.exception;
 private import std.array: Appender, replace, join;
 private import std.algorithm: startsWith, map;
 private import std.format: format;
 
 private import darktemple.parser: Parser, FragmentType, Fragment;
-private import darktemple.exception: DarkTempleException;
+private import darktemple.exception: DarkTempleSyntaxError;
 private import darktemple.utils: doEscapeString;
 
 
@@ -22,6 +21,7 @@ interface ITemplateStatement {
 
 interface ITemplateMultiStatement : ITemplateStatement {
     void addStatement(ITemplateStatement st) pure;
+    ulong startLn() const pure;
 }
 
 
@@ -84,10 +84,14 @@ pure class TemplatePlaceholder : ITemplateStatement {
 /// Template block that contains multiple statements
 pure class TemplateMultiST: ITemplateMultiStatement {
     private ITemplateStatement[] _statements;
+    private ulong _startLn;
 
-    this() pure {
+    this(ulong startLn = 0) pure {
         _statements = [];
+        _startLn = startLn;
     }
+
+    override ulong startLn() const pure => _startLn;
 
     void addStatement(ITemplateStatement st) pure {
         _statements ~= st;
@@ -130,10 +134,14 @@ pure class TemplateIfBranch: TemplateMultiST {
 pure class TemplateIf: ITemplateMultiStatement {
     private TemplateIfBranch[] _branches;
     private TemplateMultiST _else;
+    private ulong _startLn;
 
-    this(in string condition) pure {
+    this(in string condition, ulong startLn = 0) pure {
         _branches  = [new TemplateIfBranch(condition)];
+        _startLn = startLn;
     }
+
+    override ulong startLn() const pure => _startLn;
 
     void addStatement(ITemplateStatement st) pure {
         if (_else)
@@ -143,12 +151,14 @@ pure class TemplateIf: ITemplateMultiStatement {
     }
 
     void addElse(ulong line) pure {
-        enforce!DarkTempleException(!_else, "Duplicate 'else' at line %d".format(line));
+        if (_else)
+            throw new DarkTempleSyntaxError("Duplicate 'else'", line);
         _else = new TemplateMultiST();
     }
 
     void addElif(in string condition, ulong line) pure {
-        enforce!DarkTempleException(!_else, "Unexpected 'elif' after 'else' at line %d".format(line));
+        if (_else)
+            throw new DarkTempleSyntaxError("Unexpected 'elif' after 'else'", line);
         _branches ~= new TemplateIfBranch(condition);
     }
 
@@ -179,8 +189,8 @@ pure class TemplateFor: TemplateMultiST {
 
     // TODO: Implement support for expression in format `val in range` or `key, val in assocArray`
 
-    this(in string expression) pure {
-        super();
+    this(in string expression, ulong startLn = 0) pure {
+        super(startLn);
         _expression = expression;
     }
 
@@ -213,52 +223,52 @@ pure class Template : TemplateMultiST {
                     break;
                 case FragmentType.Statement:
                     if (fragment.data.startsWith("if ")) {
-                        auto stIf = new TemplateIf(fragment.data[3 .. $]);
+                        auto stIf = new TemplateIf(fragment.data[3 .. $], fragment.line);
                         _stack.back.addStatement(stIf);
                         _stack ~= stIf;
                     } else if (fragment.data == "else") {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             stIf.addElse(fragment.line);
                         } else {
-                            throw new DarkTempleException(
-                                "Unexpected 'else' at line %d: no open 'if' block"
-                                .format(fragment.line));
+                            throw new DarkTempleSyntaxError(
+                                "Unexpected 'else': no open 'if' block",
+                                fragment.line);
                         }
                     } else if (fragment.data.startsWith("elif ")) {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             stIf.addElif(fragment.data[5 .. $], fragment.line);
                         } else {
-                            throw new DarkTempleException(
-                                "Unexpected 'elif' at line %d: no open 'if' block"
-                                .format(fragment.line));
+                            throw new DarkTempleSyntaxError(
+                                "Unexpected 'elif': no open 'if' block",
+                                fragment.line);
                         }
                     } else if (fragment.data == "endif") {
                         if (auto stIf = cast(TemplateIf) _stack.back) {
                             _stack.popBack;
                         } else {
-                            throw new DarkTempleException(
-                                "Unexpected 'endif' at line %d: no open 'if' block"
-                                .format(fragment.line));
+                            throw new DarkTempleSyntaxError(
+                                "Unexpected 'endif': no open 'if' block",
+                                fragment.line);
                         }
                     } else if (fragment.data.startsWith("for ")) {
-                        auto stFor = new TemplateFor(fragment.data[4 .. $]);
+                        auto stFor = new TemplateFor(fragment.data[4 .. $], fragment.line);
                         _stack.back.addStatement(stFor);
                         _stack ~= stFor;
                     } else if (fragment.data == "endfor") {
                         if (auto stIf = cast(TemplateFor) _stack.back) {
                             _stack.popBack;
                         } else {
-                            throw new DarkTempleException(
-                                "Unexpected 'endfor' at line %d: no open 'for' block"
-                                .format(fragment.line));
+                            throw new DarkTempleSyntaxError(
+                                "Unexpected 'endfor': no open 'for' block",
+                                fragment.line);
                         }
                     } else if (fragment.data.startsWith("import ")) {
                         auto stImport = new TemplateImportBlock(fragment.data[7 .. $]);
                         _stack.back.addStatement(stImport);
                     } else
-                        throw new DarkTempleException(
-                            "Unknown statement '%s' at line %d"
-                            .format(fragment.data, fragment.line));
+                        throw new DarkTempleSyntaxError(
+                            "Unknown statement '%s'".format(fragment.data),
+                            fragment.line);
                     break;
                 case FragmentType.Comment:
                     // Do nothing
@@ -266,8 +276,9 @@ pure class Template : TemplateMultiST {
             }
         }
         if (_stack.length != 1 || _stack[0] !is this)
-            throw new DarkTempleException(
-                "Unclosed block: " ~ _stack.back.toString);
+            throw new DarkTempleSyntaxError(
+                "Unclosed block: " ~ _stack.back.toString,
+                _stack.back.startLn);
     }
 
     override string generateCode() const pure {
@@ -313,9 +324,9 @@ unittest {
 
 // Tests for issues #3, #4, #5
 unittest {
-    import std.algorithm: canFind;
-    import std.exception: assertThrown, collectExceptionMsg;
-    import darktemple.exception: DarkTempleException;
+    import std.conv: to;
+    import std.exception: assertThrown, collectException;
+    import darktemple.exception: DarkTempleException, DarkTempleSyntaxError;
 
     // #3: unknown statement must throw DarkTempleException, not AssertError
     // #5: all control-flow mismatches must throw DarkTempleException, not Exception
@@ -325,13 +336,15 @@ unittest {
     assertThrown!DarkTempleException(new Template("{% endif %}"));
     assertThrown!DarkTempleException(new Template("{% endfor %}"));
 
-    // #4: error messages must include the line number of the offending statement
-    auto msg1 = collectExceptionMsg!DarkTempleException(
+    // #4: line number of the offending statement is available as a structured field
+    auto e1 = collectException!DarkTempleSyntaxError(
         new Template("first line\n{% foobar %}"));
-    assert(msg1.canFind("line 1"), "expected 'line 1' in: " ~ msg1);
+    assert(e1 !is null);
+    assert(e1.templateLine == 1, "expected templateLine 1, got: " ~ e1.templateLine.to!string);
 
-    auto msg2 = collectExceptionMsg!DarkTempleException(
+    auto e2 = collectException!DarkTempleSyntaxError(
         new Template("line 0\nline 1\n{% else %}"));
-    assert(msg2.canFind("line 2"), "expected 'line 2' in: " ~ msg2);
+    assert(e2 !is null);
+    assert(e2.templateLine == 2, "expected templateLine 2, got: " ~ e2.templateLine.to!string);
 }
 

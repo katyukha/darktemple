@@ -2,8 +2,7 @@ module darktemple.parser;
 
 private import std.algorithm: canFind;
 private import std.ascii: isWhite;
-private import std.conv: to;
-private import darktemple.exception: DarkTempleException;
+private import darktemple.exception: DarkTempleSyntaxError;
 
 // Used to detect trailing whitespaces
 immutable (char[]) TRAILING_WHITE = [' ', '\t'];
@@ -96,9 +95,9 @@ pure struct Parser {
                 _cursor += 2;
                 while (_cursor < _data.length && _data[_cursor].isWhite) _cursor++;
                 if (_cursor >= _data.length)
-                    throw new DarkTempleException(
-                        "Unterminated " ~ _block_info.startToken ~
-                        " block at line " ~ _cursor_ln.to!string);
+                    throw new DarkTempleSyntaxError(
+                        "Unterminated " ~ _block_info.startToken ~ " block",
+                        _cursor_ln);
                 _block_start = _cursor;
                 break;
         }
@@ -161,9 +160,9 @@ pure struct Parser {
         }
         _block_end = _data.length;
         if (_block_info.type != FragmentType.Text)
-            throw new DarkTempleException(
-                "Unterminated " ~ _block_info.startToken ~
-                " block at line " ~ _block_start_ln.to!string);
+            throw new DarkTempleSyntaxError(
+                "Unterminated " ~ _block_info.startToken ~ " block",
+                _block_start_ln);
     }
 
     /** Find next fragment (block) in the text being parsed and consume it
@@ -174,9 +173,9 @@ pure struct Parser {
             // unterminated block — the content and closing token are both missing.
             if (_data.length - _cursor == 2
                     && blockStartTokens.canFind(_data[_cursor .. _cursor + 2]))
-                throw new DarkTempleException(
-                    "Unterminated " ~ _data[_cursor .. _cursor + 2] ~
-                    " block at line " ~ _cursor_ln.to!string);
+                throw new DarkTempleSyntaxError(
+                    "Unterminated " ~ _data[_cursor .. _cursor + 2] ~ " block",
+                    _cursor_ln);
             _block_info = FragmentInfoText;
         } else switch (_data[_cursor .. _cursor + 2]) {
             case FragmentInfoPlaceholder.startToken:
