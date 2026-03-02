@@ -9,9 +9,13 @@ darktemple.dll
 darktemple.a
 darktemple.lib
 darktemple-test-*
+libdarktemple.a
+libdarktemple.lib
+libdarktemple-test-*
 *.exe
 *.pdb
 *.o
 *.obj
 *.lst
 *.sw[npo]
+/dub.selections.json
