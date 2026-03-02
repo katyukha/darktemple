@@ -43,6 +43,9 @@ pure class TemplateDataBlock : ITemplateStatement {
     unittest {
         enum x = new TemplateDataBlock("somevar\nbackslash: \\,\nquote: \",\n").generateCode;
         assert(x == "    output.put(\"somevar\nbackslash: \\\\,\nquote: \\\",\n\");\n");
+        // NUL byte must be escaped as \0 in the generated code, not appear literally (#7).
+        enum y = new TemplateDataBlock("foo\0bar").generateCode;
+        assert(y == "    output.put(\"foo\\0bar\");\n");
     }
 }
 

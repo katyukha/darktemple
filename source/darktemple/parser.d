@@ -170,7 +170,13 @@ pure struct Parser {
       **/
     void findNextBlock() pure {
         if (_data.length - _cursor < 3) {
-            // There are less then 3 digits left, thus it could be just text block.
+            // If exactly 2 chars remain and they form a block opener, that is an
+            // unterminated block — the content and closing token are both missing.
+            if (_data.length - _cursor == 2
+                    && blockStartTokens.canFind(_data[_cursor .. _cursor + 2]))
+                throw new DarkTempleException(
+                    "Unterminated " ~ _data[_cursor .. _cursor + 2] ~
+                    " block at line " ~ _cursor_ln.to!string);
             _block_info = FragmentInfoText;
         } else switch (_data[_cursor .. _cursor + 2]) {
             case FragmentInfoPlaceholder.startToken:
@@ -302,6 +308,23 @@ unittest {
     assertThrown!DarkTempleException(Parser("Hello {{ name").array);
     assertThrown!DarkTempleException(Parser("{% if x").array);
     assertThrown!DarkTempleException(Parser("{# not closed").array);
+}
+
+// Bug #6: bare block opener (exactly 2 chars) at end of string silently fell
+// through to text mode, then crashed with assert(0) in front().
+unittest {
+    import std.array: array;
+    import std.exception: assertThrown;
+    import darktemple.exception: DarkTempleException;
+
+    assertThrown!DarkTempleException(Parser("{{").array);
+    assertThrown!DarkTempleException(Parser("{%").array);
+    assertThrown!DarkTempleException(Parser("{#").array);
+    assertThrown!DarkTempleException(Parser("Hello {{").array);
+    assertThrown!DarkTempleException(Parser("{{ ").array);
+    assertThrown!DarkTempleException(Parser("{% ").array);
+    assertThrown!DarkTempleException(Parser("{# ").array);
+    assertThrown!DarkTempleException(Parser("Hello {{ ").array);
 }
 
 // Test parsing imported file
